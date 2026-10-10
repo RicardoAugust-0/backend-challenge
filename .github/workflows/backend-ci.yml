@@ -1,27 +1,40 @@
 name: Backend CI
-
 on:
   push:
-    branches:
-      - main
-      - feat/backend-foundation
+    branches: [main, feat/backend-foundation]
   pull_request:
-
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wagering
+          POSTGRES_PASSWORD: wagering_dev
+          POSTGRES_DB: wagering_db
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U wagering -d wagering_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_HOST: localhost
+      DATABASE_PORT: '5432'
+      DATABASE_USER: wagering
+      DATABASE_PASSWORD: wagering_dev
+      DATABASE_NAME: wagering_db
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.2'
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: TypeScript typecheck
-        run: bunx tsc --noEmit
-      - name: Domain unit tests
-        run: bun test src/domain
-      - name: Build
-        run: bun run build
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bun test src/domain
+      - run: bun run build
+      - run: bunx mikro-orm migration:up
+      - run: bun test src/application
+        env:
+          RUN_DB_TESTS: '1'
