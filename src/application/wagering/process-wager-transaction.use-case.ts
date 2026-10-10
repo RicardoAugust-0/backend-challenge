@@ -103,7 +103,7 @@ export class ProcessWagerTransactionUseCase {
       ].sort();
 
       for (const key of lockKeys) {
-        await tx.getConnection().execute(
+        await tx.execute(
           'select pg_advisory_xact_lock(hashtextextended(?, 0))',
           [key],
         );
