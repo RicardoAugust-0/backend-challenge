@@ -38,3 +38,7 @@ jobs:
       - run: bun test src/application
         env:
           RUN_DB_TESTS: '1'
+      - name: HTTP end-to-end tests (Jest / Node)
+        run: node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand
+        env:
+          RUN_DB_TESTS: '1'

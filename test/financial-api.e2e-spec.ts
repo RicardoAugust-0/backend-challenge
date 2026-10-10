@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from 'bun:test';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { AppModule } from '../../app.module';
+import { AppModule } from '../src/app.module';
 
-const dbTest = process.env.RUN_DB_TESTS === '1' ? test : test.skip;
+const dbTest = process.env.RUN_DB_TESTS === '1' ? it : it.skip;
 
 dbTest('HTTP wallet, BET, replay, lookups and reconciliation', async () => {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
