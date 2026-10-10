@@ -2,6 +2,9 @@ import 'dotenv/config';
 
 import { Migrator } from '@mikro-orm/migrations';
 import { defineConfig } from '@mikro-orm/postgresql';
+import { WalletEntity } from './infrastructure/persistence/entities/wallet.entity';
+import { WagerTransactionEntity } from './infrastructure/persistence/entities/wager-transaction.entity';
+import { WalletLedgerEntryEntity } from './infrastructure/persistence/entities/wallet-ledger-entry.entity';
 
 export default defineConfig({
   host: process.env.DATABASE_HOST ?? 'localhost',
@@ -10,8 +13,9 @@ export default defineConfig({
   password: process.env.DATABASE_PASSWORD,
   dbName: process.env.DATABASE_NAME,
 
-  entities: ['./dist/**/*.entity.js'],
-  entitiesTs: ['./src/**/*.entity.ts'],
+  // Use the same entity constructors as repositories in Node, Jest and Bun.
+  // Mixing compiled JS and TypeScript classes breaks MikroORM identity checks.
+  entities: [WalletEntity, WagerTransactionEntity, WalletLedgerEntryEntity],
 
   extensions: [Migrator],
 
