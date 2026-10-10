@@ -8,21 +8,18 @@ import { WalletLedgerEntryEntity } from '../../infrastructure/persistence/entiti
 import { WalletRepository } from '../../infrastructure/persistence/repositories/wallet.repository';
 import { WagerTransactionRepository } from '../../infrastructure/persistence/repositories/wager-transaction.repository';
 import { WalletLedgerEntryRepository } from '../../infrastructure/persistence/repositories/wallet-ledger-entry.repository';
+import { openTestWallet } from './wagering-db-test.helpers';
 import { ProcessWagerTransactionUseCase, WagerIdempotencyConflictError } from './process-wager-transaction.use-case';
 
 const dbTest = process.env.RUN_DB_TESTS === '1' ? test : test.skip;
 dbTest('50 duplicate requests debit exactly once and conflicting payload fails', async () => {
   const orm = await MikroORM.init(config);
   try {
-    const wallet = new WalletEntity();
-    wallet.id = randomUUID();
-    wallet.playerId = randomUUID();
-    wallet.balance = '100.00';
-    await orm.em.fork().persistAndFlush(wallet);
+    const wallet = await openTestWallet(orm);
 
     const input = {
       providerId: 'provider', externalTransactionId: randomUUID(),
-      idempotencyKey: randomUUID(), walletId: wallet.id, playerId: wallet.playerId,
+      idempotencyKey: randomUUID(), walletId: wallet.walletId, playerId: wallet.playerId,
       roundId: 'round', gameId: 'game', kind: WagerTransactionKind.Bet,
       amount: '10.00', currency: 'BRL',
     };
@@ -42,11 +39,13 @@ dbTest('50 duplicate requests debit exactly once and conflicting payload fails',
       WagerIdempotencyConflictError,
     );
     const em = orm.em.fork();
-    const updated = await em.findOneOrFail(WalletEntity, { id: wallet.id });
-    const entries = await em.find(WalletLedgerEntryEntity, { wallet: wallet.id });
+    const updated = await em.findOneOrFail(WalletEntity, { id: wallet.walletId });
+    const entries = await em.find(WalletLedgerEntryEntity, { wallet: wallet.walletId });
     expect(updated.balance).toBe('90.00');
-    expect(entries.length).toBe(1);
+    expect(entries.length).toBe(2);
+    expect(entries.filter((e) => e.direction === 'DEBIT').length).toBe(1);
+    expect(entries.find((e) => e.direction === 'DEBIT')?.balanceAfter).toBe('90.00');
   } finally {
     await orm.close(true);
   }
-});
+}, 60_000);

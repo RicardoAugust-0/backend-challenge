@@ -8,6 +8,7 @@ import { WalletLedgerEntryEntity } from '../../infrastructure/persistence/entiti
 import { WalletRepository } from '../../infrastructure/persistence/repositories/wallet.repository';
 import { WagerTransactionRepository } from '../../infrastructure/persistence/repositories/wager-transaction.repository';
 import { WalletLedgerEntryRepository } from '../../infrastructure/persistence/repositories/wallet-ledger-entry.repository';
+import { openTestWallet } from './wagering-db-test.helpers';
 import { ProcessWagerTransactionUseCase } from './process-wager-transaction.use-case';
 
 let orm: MikroORM;
@@ -16,12 +17,7 @@ afterAll(async () => { if (orm) await orm.close(true); });
 const dbTest = process.env.RUN_DB_TESTS === '1' ? test : test.skip;
 
 dbTest('concurrent 80.00 BETs against 100.00 never overdraw wallet', async () => {
-  const wallet = new WalletEntity();
-  wallet.id = randomUUID();
-  wallet.playerId = randomUUID();
-  wallet.balance = '100.00';
-  wallet.currency = 'BRL';
-  await orm.em.fork().persistAndFlush(wallet);
+  const wallet = await openTestWallet(orm);
 
   const run = () => {
     const em = orm.em.fork();
@@ -31,7 +27,7 @@ dbTest('concurrent 80.00 BETs against 100.00 never overdraw wallet', async () =>
     );
     return useCase.execute({
       providerId: 'integration', externalTransactionId: randomUUID(),
-      idempotencyKey: randomUUID(), walletId: wallet.id, playerId: wallet.playerId,
+      idempotencyKey: randomUUID(), walletId: wallet.walletId, playerId: wallet.playerId,
       roundId: 'round-1', gameId: 'game-1', kind: WagerTransactionKind.Bet,
       amount: '80.00', currency: 'BRL',
     });
@@ -40,9 +36,11 @@ dbTest('concurrent 80.00 BETs against 100.00 never overdraw wallet', async () =>
   expect(results.filter((r) => r.status === WagerTransactionStatus.Processed).length).toBe(1);
   expect(results.filter((r) => r.status === WagerTransactionStatus.Rejected).length).toBe(1);
   const em = orm.em.fork();
-  const stored = await em.findOneOrFail(WalletEntity, { id: wallet.id });
-  const ledger = await em.find(WalletLedgerEntryEntity, { wallet: wallet.id });
+  const stored = await em.findOneOrFail(WalletEntity, { id: wallet.walletId });
+  const ledger = await em.find(WalletLedgerEntryEntity, { wallet: wallet.walletId });
   expect(stored.balance).toBe('20.00');
   expect(stored.version).toBe(2);
-  expect(ledger.length).toBe(1);
+  expect(ledger.length).toBe(2);
+  expect(ledger.filter((e) => e.direction === 'DEBIT').length).toBe(1);
+  expect(ledger.find((e) => e.direction === 'DEBIT')?.balanceAfter).toBe('20.00');
 });
