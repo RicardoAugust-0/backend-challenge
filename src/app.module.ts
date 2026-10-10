@@ -5,9 +5,10 @@ import mikroOrmConfig from '../mikro-orm.config';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PersistenceModule } from './infrastructure/persistence/persistence.module';
 
 @Module({
-  imports: [MikroOrmModule.forRoot(mikroOrmConfig)],
+  imports: [MikroOrmModule.forRoot(mikroOrmConfig), PersistenceModule],
   controllers: [AppController],
   providers: [AppService],
 })
