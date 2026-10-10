@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { WagerTransaction } from '../../../domain/wagering/wager-transaction';
+import type { ProcessWagerResult } from '../../../application/wagering/process-wager-transaction.use-case';
 import { WagerTransactionEntity } from '../entities/wager-transaction.entity';
 import { WalletEntity } from '../entities/wallet.entity';
 import { WagerTransactionMapper } from '../mappers/wager-transaction.mapper';
@@ -30,7 +31,14 @@ export class WagerTransactionRepository {
     return entity ? WagerTransactionMapper.toDomain(entity) : null;
   }
 
-  // Persist only; the use case must commit wallet, transaction and ledger atomically.
+  async findResponseSnapshot(
+    id: string,
+    manager: EntityManager = this.em,
+  ): Promise<ProcessWagerResult | null> {
+    const entity = await manager.findOne(WagerTransactionEntity, { id }, { refresh: true });
+    return entity?.responseSnapshot ?? null;
+  }
+
   create(transaction: WagerTransaction, manager: EntityManager = this.em): void {
     const entity = new WagerTransactionEntity();
     entity.id = transaction.id;
@@ -59,6 +67,7 @@ export class WagerTransactionRepository {
   async updateStatus(
     transaction: WagerTransaction,
     manager: EntityManager = this.em,
+    responseSnapshot?: ProcessWagerResult,
   ): Promise<void> {
     const affectedRows = await manager.nativeUpdate(
       WagerTransactionEntity,
@@ -70,6 +79,7 @@ export class WagerTransactionRepository {
         referenceTransaction: transaction.referenceTransactionId
           ? manager.getReference(WagerTransactionEntity, transaction.referenceTransactionId)
           : null,
+        ...(responseSnapshot ? { responseSnapshot } : {}),
       },
     );
     if (affectedRows !== 1) throw new Error('WAGER_TRANSACTION_NOT_FOUND');

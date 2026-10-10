@@ -13,19 +13,14 @@ import {
 } from '../../../domain/wagering/wager-transaction';
 
 import type { FailureCode } from '../../../domain/wagering/wager-transaction';
+import type { ProcessWagerResult } from '../../../application/wagering/process-wager-transaction.use-case';
 
 import { WalletEntity } from './wallet.entity';
 
 @Entity({ tableName: 'wager_transactions' })
-@Unique({
-  properties: ['providerId', 'externalTransactionId'],
-})
-@Unique({
-  properties: ['providerId', 'idempotencyKey'],
-})
-@Index({
-  properties: ['providerId', 'referenceExternalTransactionId'],
-})
+@Unique({ properties: ['providerId', 'externalTransactionId'] })
+@Unique({ properties: ['providerId', 'idempotencyKey'] })
+@Index({ properties: ['providerId', 'referenceExternalTransactionId'] })
 export class WagerTransactionEntity {
   @PrimaryKey({ type: 'uuid' })
   id!: string;
@@ -42,9 +37,7 @@ export class WagerTransactionEntity {
   @Property({ type: 'string', length: 64 })
   payloadHash!: string;
 
-  @ManyToOne(() => WalletEntity, {
-    fieldName: 'wallet_id',
-  })
+  @ManyToOne(() => WalletEntity, { fieldName: 'wallet_id' })
   wallet!: WalletEntity;
 
   @Property({ type: 'string' })
@@ -59,11 +52,7 @@ export class WagerTransactionEntity {
   @Property({ type: 'string' })
   kind!: WagerTransactionKind;
 
-  @Property({
-    type: 'decimal',
-    precision: 20,
-    scale: 2,
-  })
+  @Property({ type: 'decimal', precision: 20, scale: 2 })
   amount!: string;
 
   @Property({ type: 'string', length: 3 })
@@ -84,12 +73,12 @@ export class WagerTransactionEntity {
   @Property({ type: 'string', nullable: true })
   failureCode?: FailureCode;
 
+  @Property({ type: 'json', nullable: true })
+  responseSnapshot?: ProcessWagerResult;
+
   @Property({ type: 'timestamptz' })
   createdAt: Date = new Date();
 
-  @Property({
-    type: 'timestamptz',
-    nullable: true,
-  })
+  @Property({ type: 'timestamptz', nullable: true })
   processedAt?: Date;
 }

@@ -6,9 +6,14 @@ import mikroOrmConfig from './mikro-orm.config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PersistenceModule } from './infrastructure/persistence/persistence.module';
+import { WageringApplicationModule } from './application/wagering/wagering-application.module';
 
 @Module({
-  imports: [MikroOrmModule.forRoot(mikroOrmConfig), PersistenceModule],
+  imports: [
+    MikroOrmModule.forRoot(mikroOrmConfig),
+    PersistenceModule,
+    WageringApplicationModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
