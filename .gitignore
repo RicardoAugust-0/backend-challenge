@@ -3,3 +3,11 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Arquivos gerados pelo TypeScript
+*.tsbuildinfo
+*.d.ts
+*.js.map
+
+# Configuração compilada na raiz
+/mikro-orm.config.js
