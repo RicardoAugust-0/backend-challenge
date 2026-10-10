@@ -21,6 +21,10 @@ function requiredString(data: Record<string, unknown>, key: string): string {
   if (typeof value !== 'string' || !value.trim() || value.length > 255) {
     throw new BadRequestException({ code: 'INVALID_' + key.toUpperCase() });
   }
+  if (key === 'walletId' &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw new BadRequestException({ code: 'INVALID_WALLET_ID' });
+  }
   return value;
 }
 
@@ -90,6 +94,9 @@ export class WageringController {
 
   @Get(':transactionId')
   async findById(@Param('transactionId') id: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      throw new BadRequestException({ code: 'INVALID_TRANSACTION_ID' });
+    }
     const entity = await this.em.findOne(WagerTransactionEntity, { id });
     if (!entity) throw new NotFoundException({ code: 'TRANSACTION_NOT_FOUND' });
     return {

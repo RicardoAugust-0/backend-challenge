@@ -1,9 +1,11 @@
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import {
   BadRequestException,
   Body,
   ConflictException,
   Controller,
   Get,
+  Query,
   NotFoundException,
   Param,
   Post,
@@ -14,6 +16,12 @@ import { OpenWalletUseCase } from '../../application/wagering/open-wallet.use-ca
 import { WalletRepository } from '../../infrastructure/persistence/repositories/wallet.repository';
 
 interface MoneyInput { amount: string; currency: string }
+
+function assertWalletId(walletId: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(walletId)) {
+    throw new BadRequestException({ code: 'INVALID_WALLET_ID' });
+  }
+}
 
 function parseOpeningBody(value: unknown): { playerId: string; initialBalance: MoneyInput } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -59,7 +67,8 @@ export class WalletController {
         version: 1,
       };
     } catch (error) {
-      if (error instanceof Error && (error as Error & { code?: string }).code === '23505') {
+      if (error instanceof UniqueConstraintViolationException ||
+          (error instanceof Error && (error as Error & { code?: string }).code === '23505')) {
         throw new ConflictException({ code: 'WALLET_ALREADY_EXISTS' });
       }
       if (error instanceof Error && [
@@ -73,6 +82,7 @@ export class WalletController {
 
   @Get(':walletId')
   async findById(@Param('walletId') walletId: string) {
+    assertWalletId(walletId);
     const wallet = await this.wallets.findById(walletId);
     if (!wallet) throw new NotFoundException({ code: 'WALLET_NOT_FOUND' });
     return {
@@ -85,8 +95,85 @@ export class WalletController {
     };
   }
 
+  @Get(':walletId/ledger')
+  async listLedger(
+    @Param('walletId') walletId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limitParam?: string,
+  ) {
+    assertWalletId(walletId);
+    const limit = limitParam === undefined ? 50 : Number(limitParam);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException({ code: 'INVALID_PAGE_LIMIT' });
+    }
+    const wallet = await this.wallets.findById(walletId);
+    if (!wallet) throw new NotFoundException({ code: 'WALLET_NOT_FOUND' });
+
+    let last: { createdAt: string; id: string } | null = null;
+    if (cursor !== undefined) {
+      try {
+        const data: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+        if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error();
+        const value = data as Record<string, unknown>;
+        if (typeof value.createdAt !== 'string' || typeof value.id !== 'string' ||
+            !Number.isFinite(Date.parse(value.createdAt)) ||
+            !/^[0-9a-f-]{36}$/i.test(value.id)) throw new Error();
+        last = { createdAt: value.createdAt, id: value.id };
+      } catch {
+        throw new BadRequestException({ code: 'INVALID_LEDGER_CURSOR' });
+      }
+    }
+
+    type LedgerRow = {
+      id: string;
+      transaction_id: string;
+      direction: string;
+      amount: string;
+      currency: string;
+      balance_before: string;
+      balance_after: string;
+      created_at: Date;
+    };
+    const where = last ? 'and (created_at, id) < (?::timestamptz, ?::uuid)' : '';
+    const params: (string | number)[] = [walletId];
+    if (last) params.push(last.createdAt, last.id);
+    params.push(limit + 1);
+    const records = await this.em.getConnection().execute<LedgerRow[]>(
+      `select id, transaction_id, direction, amount, currency,
+              balance_before, balance_after, created_at
+       from wallet_ledger_entries
+       where wallet_id = ? ${where}
+       order by created_at desc, id desc
+       limit ?`,
+      params,
+    );
+    const hasMore = records.length > limit;
+    const visible = records.slice(0, limit);
+    const finalEntry = visible[visible.length - 1];
+    const nextCursor = hasMore && finalEntry
+      ? Buffer.from(JSON.stringify({
+          createdAt: new Date(finalEntry.created_at).toISOString(),
+          id: finalEntry.id,
+        })).toString('base64url')
+      : null;
+
+    return {
+      items: visible.map((entry) => ({
+        id: entry.id,
+        transactionId: entry.transaction_id,
+        direction: entry.direction,
+        amount: { amount: entry.amount, currency: entry.currency },
+        balanceBefore: { amount: entry.balance_before, currency: entry.currency },
+        balanceAfter: { amount: entry.balance_after, currency: entry.currency },
+        createdAt: entry.created_at,
+      })),
+      nextCursor,
+    };
+  }
+
   @Post(':walletId/reconciliation')
   async reconcile(@Param('walletId') walletId: string) {
+    assertWalletId(walletId);
     // One SQL statement ensures a consistent snapshot of wallet and ledger.
     const rows = await this.em.getConnection().execute<Array<{
       wallet_id: string;

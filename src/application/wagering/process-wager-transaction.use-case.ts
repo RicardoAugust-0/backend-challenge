@@ -48,11 +48,11 @@ function assertNonEmpty(value: string, name: string): void {
   }
 }
 
+// Only business fields participate; transport idempotency headers are excluded.
 function canonicalHash(command: ProcessWagerCommand): string {
   const payload = [
     command.providerId,
     command.externalTransactionId,
-    command.idempotencyKey,
     command.walletId,
     command.playerId,
     command.roundId,

@@ -67,6 +67,13 @@ dbTest('WIN and LOSS preserve replay snapshot and ledger accounting', async () =
     expect(replay.idempotentReplay).toBe(true);
     expect(replay.transactionId).toBe(win.transactionId);
     expect(replay.balance.amount).toBe('125.00');
+    const replayWithNewTransportKey = await execute({
+      ...winCommand,
+      idempotencyKey: randomUUID(),
+    });
+    expect(replayWithNewTransportKey.idempotentReplay).toBe(true);
+    expect(replayWithNewTransportKey.transactionId).toBe(win.transactionId);
+    expect(replayWithNewTransportKey.balance.amount).toBe('125.00');
 
     const em = orm.em.fork();
     const wallet = await em.findOneOrFail(WalletEntity, { id: walletId });
